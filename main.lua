@@ -1,5 +1,5 @@
-local player = {x = 100, y = 200, health = 100, damage = 50, state = "idle", hit_time = 0, attack_time = 0}
-local enemy = {x = 300, y = 200, health = 100, max_health = 100, damage = 10, state = "idle", attack = nil, attack_time = 0, indicator_time = 1.5, hit_time = 0, idle_time = 0, death_time = 0, hit_delay = 0}
+local player = {x = 100, y = 250, health = 100, damage = 50, state = "idle", hit_time = 0, attack_time = 0}
+local enemy = {x = 300, y = 250, health = 100, max_health = 100, damage = 10, state = "idle", attack = nil, attack_time = 0, indicator_time = 1.5, hit_time = 0, idle_time = 0, death_time = 0, hit_delay = 0}
 local gameState = "menu"
 local countdown = 2 -- Game start countdown
 local counterKey = {overhead = "up", stab = "left", swing = "down"}
@@ -8,6 +8,8 @@ local playerInputLocked = false -- Prevent multiple inputs during a single attac
 local menuSelection = 1 -- Menu navigation index
 local playerSprites = {}
 local enemySprites = {}
+local menuSprites = {}
+local background
 
 -- Safe image loader
 function safeLoadImage(path)
@@ -26,27 +28,36 @@ function love.load()
     love.window.setMode(800, 600)
     love.window.setTitle("Warriors")
 
+    -- Load background
+    background = safeLoadImage("assets/background/bg.png")
+
+    -- Load main menu
+    menuSprites.background = safeLoadImage("assets/menu/menubg.png")
+    -- menuSprites.start = safeLoadImage("assets/menu/menustart.png")
+    -- menuSprites.howToPlay = safeLoadImage("assets/menu/howtoplay.png")
+    -- menuSprites.mexit = safeLoadImage("assets/menu/menuexit.png")
+
     -- Load player sprites
-    playerSprites.idle = safeLoadImage("assets/player_idle.png")
-    playerSprites.hit = safeLoadImage("assets/player_hit.png")
-    playerSprites.death = safeLoadImage("assets/player_death.png")    
-    playerSprites.attack = safeLoadImage("assets/player_attack.png")
+    playerSprites.idle = safeLoadImage("assets/player/player_idle.png")
+    playerSprites.hit = safeLoadImage("assets/player/player_hit.png")
+    playerSprites.death = safeLoadImage("assets/player/player_death.png")    
+    playerSprites.attack = safeLoadImage("assets/player/player_attack.png")
     -- No current use for block sprites but added for future update
-    playerSprites.blockOverhead = safeLoadImage("assets/player_block_overhead.png")
-    playerSprites.blockStab = safeLoadImage("assets/player_block_stab.png")
-    playerSprites.blockSwing = safeLoadImage("assets/player_block_swing.png")
+    playerSprites.blockOverhead = safeLoadImage("assets/player/player_block_overhead.png")
+    playerSprites.blockStab = safeLoadImage("assets/player/player_block_stab.png")
+    playerSprites.blockSwing = safeLoadImage("assets/player/player_block_swing.png")
 
 
     -- Load enemy sprites
-    enemySprites.idle = safeLoadImage("assets/enemy_idle.png")
-    enemySprites.hit = safeLoadImage("assets/enemy_hit.png")
-    enemySprites.death = safeLoadImage("assets/enemy_death.png")
-    enemySprites.attackOverhead = safeLoadImage("assets/enemy_attack_overhead.png")
-    enemySprites.attackStab = safeLoadImage("assets/enemy_attack_stab.png")
-    enemySprites.attackSwing = safeLoadImage("assets/enemy_attack_swing.png")
-    enemySprites.indicatorOverhead = safeLoadImage("assets/enemy_indicator_overhead.png")
-    enemySprites.indicatorStab = safeLoadImage("assets/enemy_indicator_stab.png")
-    enemySprites.indicatorSwing = safeLoadImage("assets/enemy_indicator_swing.png")
+    enemySprites.idle = safeLoadImage("assets/enemy/enemy_idle.png")
+    enemySprites.hit = safeLoadImage("assets/enemy/enemy_hit.png")
+    enemySprites.death = safeLoadImage("assets/enemy/enemy_death.png")
+    enemySprites.attackOverhead = safeLoadImage("assets/enemy/enemy_attack_overhead.png")
+    enemySprites.attackStab = safeLoadImage("assets/enemy/enemy_attack_stab.png")
+    enemySprites.attackSwing = safeLoadImage("assets/enemy/enemy_attack_swing.png")
+    enemySprites.indicatorOverhead = safeLoadImage("assets/enemy/enemy_indicator_overhead.png")
+    enemySprites.indicatorStab = safeLoadImage("assets/enemy/enemy_indicator_stab.png")
+    enemySprites.indicatorSwing = safeLoadImage("assets/enemy/enemy_indicator_swing.png")
 end
 
 -- Update
@@ -147,41 +158,48 @@ end
 
 -- Drawing
 function love.draw()
+    love.graphics.clear(1,1,1)
+
     if gameState == "menu" then
         -- Render the main menu
-        love.graphics.clear(1, 1, 1) -- White background
-        love.graphics.setColor(0, 0, 0) -- Black text
-        love.graphics.printf("WARRIORS", 0, 100, 800, "center") -- Title
+        if menuSprites.background then
+            love.graphics.setColor(1,1,1)
+            love.graphics.draw(menuSprites.background, 0, 0)
+        end
 
         -- Menu options
-        local options = {"Start Game", "How to Play"}
+        local options = {"START", "How to Play"}
         for i, option in ipairs(options) do
             if i == menuSelection then
                 love.graphics.setColor(0.2, 0.2, 0.8) -- Highlighted option
             else
                 love.graphics.setColor(0, 0, 0) -- Normal option
             end
-            love.graphics.printf(option, 0, 200 + (i - 1) * 40, 800, "center")
+            love.graphics.printf(option, 0, 250 + (i - 1) * 60, 800, "center")
         end
 
     elseif gameState == "howToPlay" then
-        -- Render the How to Play screen
-        love.graphics.clear(1, 1, 1) -- White background
-        love.graphics.setColor(0, 0, 0) -- Black text
-        love.graphics.printf("HOW TO PLAY", 0, 100, 800, "center")
-        love.graphics.printf("Press the arrow keys (UP, LEFT, DOWN) to block enemy attacks.", 50, 200, 700, "center")
-        love.graphics.printf("Press ESC or M to return to the main menu.", 50, 300, 700, "center")
+        -- How to Play screen
+        love.graphics.setColor(1,1,1)
+        love.graphics.draw(menuSprites.background, 0, 0)
+        love.graphics.printf("How to Play", 0, 230, 800, "center")
+        love.graphics.printf("Press the arrow keys (UP, LEFT, DOWN) to block enemy attacks.", 50, 330, 700, "center")
+        love.graphics.printf("Press ESC or M to return to the main menu.", 50, 430, 700, "center")
 
     elseif gameState == "countdown" then
-        -- Render the countdown before the game starts
-        love.graphics.clear(1, 1, 1) -- White background
-        love.graphics.setColor(0, 0, 0) -- Black text
+        -- Countdown for starts
+        love.graphics.clear(1, 1, 1)
+        love.graphics.setColor(0, 0, 0)
         love.graphics.printf("Get ready! " .. math.ceil(countdown), 0, 300, 800, "center")
 
     elseif gameState == "playing" then
+        -- Draw background
+        if background then
+            love.graphics.draw(background, 0, 0)
+        end
         -- Render the playing state
-        love.graphics.clear(1, 1, 1) -- White background
-        love.graphics.setColor(0, 0, 0) -- Black text
+        -- love.graphics.clear(1, 1, 1)
+        love.graphics.setColor(0, 0, 0)
 
         -- Display the current round
         love.graphics.printf("ROUND: " .. score, 0, 10, 800, "center")
@@ -206,10 +224,27 @@ function love.draw()
         -- Draw enemy sprite
         if enemy.state == "death" then
             love.graphics.draw(enemySprites.death, enemy.x, enemy.y)
+
+        elseif enemy.state == "indicator" then
+            if enemy.attack == "overhead" then
+                love.graphics.draw(enemySprites.indicatorOverhead, enemy.x, enemy.y)
+            elseif enemy.attack == "stab" then
+                love.graphics.draw(enemySprites.indicatorStab, enemy.x, enemy.y)
+            elseif enemy.attack == "swing" then
+                love.graphics.draw(enemySprites.indicatorSwing, enemy.x, enemy.y)
+            end
+
+        elseif enemy.state == "attack" then
+            if enemy.attack == "overhead" then
+                love.graphics.draw(enemySprites.attackOverhead, enemy.x, enemy.y)
+            elseif enemy.attack == "stab" then
+                love.graphics.draw(enemySprites.attackStab, enemy.x, enemy.y)
+            elseif enemy.attack == "swing" then
+                love.graphics.draw(enemySprites.attackSwing, enemy.x, enemy.y)
+            end
+
         elseif enemy.state and enemySprites[enemy.state] then
             love.graphics.draw(enemySprites[enemy.state], enemy.x, enemy.y)
-        elseif enemy.attack then
-            love.graphics.draw(enemySprites["attack" .. enemy.attack:sub(1, 1):upper() .. enemy.attack:sub(2)], enemy.x, enemy.y)
         end
 
         -- Player sprite drawn after to get correct layering (needs to be fixed later via layermanager..)
@@ -224,7 +259,7 @@ function love.draw()
         love.graphics.setColor(0, 0, 0) -- Black text
         love.graphics.printf("GAME OVER", 0, 100, 800, "center")
         love.graphics.printf("Enemies Defeated: " .. (score - 1), 0, 200, 800, "center")
-        love.graphics.printf("Press R to restart, M to return to the menu, or X to exit.", 50, 400, 700, "center")
+        love.graphics.printf("Press 'R' to restart, 'M' to return to the menu, or 'X' to exit.", 50, 400, 700, "center")
     end
 end
 
@@ -251,7 +286,7 @@ function resetGameState()
     playerInputLocked = false
 end
 
--- Key pressed logic
+-- Key logic
 function love.keypressed(key)
     if gameState == "menu" then
         -- Navigate menu options
@@ -303,7 +338,7 @@ function love.keypressed(key)
     end
 end
 
--- Love2D Quit event for exiting
+-- Exit
 function love.quit()
     print("Thanks for playing Warriors!")
 end
