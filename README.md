@@ -1,6 +1,8 @@
 # WARRIORS
 
-## stuff for .json
+#### This project combines making a fun game with learning Lua
+
+## Lua/LOVE2D .json config
 ```json
 {
     "Lua.runtime.version": "Lua 5.1",
