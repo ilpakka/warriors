@@ -1,16 +1,15 @@
--- Load Love2D libraries
-local player = {x = 150, y = 200, health = 100, damage = 50, state = "idle", hit_time = 0, attack_time = 0}
-local enemy = {x = 350, y = 200, health = 100, max_health = 100, damage = 10, state = "idle", attack = nil, attack_time = 0, indicator_time = 1.5, hit_time = 0, idle_time = 0, death_time = 0, hit_delay = 0}
+local player = {x = 100, y = 200, health = 100, damage = 50, state = "idle", hit_time = 0, attack_time = 0}
+local enemy = {x = 300, y = 200, health = 100, max_health = 100, damage = 10, state = "idle", attack = nil, attack_time = 0, indicator_time = 1.5, hit_time = 0, idle_time = 0, death_time = 0, hit_delay = 0}
 local gameState = "menu"
-local countdown = 2
+local countdown = 2 -- Game start countdown
 local counterKey = {overhead = "up", stab = "left", swing = "down"}
-local score = 1 -- Score tracker (represents the current round)
+local score = 1 -- Score / round tracker
 local playerInputLocked = false -- Prevent multiple inputs during a single attack cycle
 local menuSelection = 1 -- Menu navigation index
 local playerSprites = {}
 local enemySprites = {}
 
--- Helper function for safe image loading
+-- Safe image loader
 function safeLoadImage(path)
     local success, image = pcall(love.graphics.newImage, path)
     if success then
@@ -21,7 +20,7 @@ function safeLoadImage(path)
     end
 end
 
--- Love2D Functions
+-- Loading
 function love.load()
     -- Set fixed window size and title
     love.window.setMode(800, 600)
@@ -30,7 +29,13 @@ function love.load()
     -- Load player sprites
     playerSprites.idle = safeLoadImage("assets/player_idle.png")
     playerSprites.hit = safeLoadImage("assets/player_hit.png")
+    playerSprites.death = safeLoadImage("assets/player_death.png")    
     playerSprites.attack = safeLoadImage("assets/player_attack.png")
+    -- No current use for block sprites but added for future update
+    playerSprites.blockOverhead = safeLoadImage("assets/player_block_overhead.png")
+    playerSprites.blockStab = safeLoadImage("assets/player_block_stab.png")
+    playerSprites.blockSwing = safeLoadImage("assets/player_block_swing.png")
+
 
     -- Load enemy sprites
     enemySprites.idle = safeLoadImage("assets/enemy_idle.png")
@@ -44,6 +49,7 @@ function love.load()
     enemySprites.indicatorSwing = safeLoadImage("assets/enemy_indicator_swing.png")
 end
 
+-- Update
 function love.update(dt)
     if gameState == "menu" then
         -- Wait for user to select an option
@@ -139,6 +145,7 @@ function love.update(dt)
     end
 end
 
+-- Drawing
 function love.draw()
     if gameState == "menu" then
         -- Render the main menu
@@ -193,13 +200,8 @@ function love.draw()
         love.graphics.rectangle("line", 590, 30, 200, 20)
         love.graphics.print("Enemy HP: " .. enemy.health .. "/" .. enemy.max_health, 590, 55)
 
-        -- Reset to white before rendering sprites
+        -- Reset to white background before rendering sprites (sprite colors clash)
         love.graphics.setColor(1, 1, 1)
-
-        -- Draw player sprite
-        if playerSprites[player.state] then
-            love.graphics.draw(playerSprites[player.state], player.x, player.y)
-        end
 
         -- Draw enemy sprite
         if enemy.state == "death" then
@@ -208,6 +210,12 @@ function love.draw()
             love.graphics.draw(enemySprites[enemy.state], enemy.x, enemy.y)
         elseif enemy.attack then
             love.graphics.draw(enemySprites["attack" .. enemy.attack:sub(1, 1):upper() .. enemy.attack:sub(2)], enemy.x, enemy.y)
+        end
+
+        -- Player sprite drawn after to get correct layering (needs to be fixed later via layermanager..)
+        -- Draw player sprite
+        if playerSprites[player.state] then
+            love.graphics.draw(playerSprites[player.state], player.x, player.y)
         end
 
     elseif gameState == "gameover" then
@@ -220,7 +228,7 @@ function love.draw()
     end
 end
 
--- Function to reset the game state for a new round or restart
+-- Game state reset
 function resetGameState()
     gameState = "countdown"
     countdown = 2
