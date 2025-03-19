@@ -1,5 +1,5 @@
-local player = {x = 100, y = 250, health = 100, damage = 50, state = "idle", hit_time = 0, attack_time = 0}
-local enemy = {x = 300, y = 250, health = 100, max_health = 100, damage = 10, state = "idle", attack = nil, attack_time = 0, indicator_time = 1.5, hit_time = 0, idle_time = 0, death_time = 0, hit_delay = 0}
+local player = {health = 100, damage = 50, state = "idle", hit_time = 0, attack_time = 0, block_time = 0}
+local enemy = {health = 100, max_health = 100, damage = 10, state = "idle", attack = nil, attack_time = 0, indicator_time = 1.5, hit_time = 0, idle_time = 0, death_time = 0, hit_delay = 0}
 local gameState = "menu"
 local countdown = 2 -- Game start countdown
 local counterKey = {overhead = "up", stab = "left", swing = "down"}
@@ -9,6 +9,7 @@ local menuSelection = 1 -- Menu navigation index
 local playerSprites = {}
 local enemySprites = {}
 local menuSprites = {}
+local fonts = {}
 local background
 
 -- Safe image loader
@@ -28,11 +29,18 @@ function love.load()
     love.window.setMode(800, 600)
     love.window.setTitle("Warriors")
 
+    -- Font sizes
+    fonts.small = love.graphics.newFont(16)
+    fonts.medium = love.graphics.newFont(32)
+    fonts.large = love.graphics.newFont(48)
+
     -- Load background
     background = safeLoadImage("assets/background/bg.png")
 
     -- Load main menu
     menuSprites.background = safeLoadImage("assets/menu/menubg.png")
+
+    -- Other menu options later
     -- menuSprites.start = safeLoadImage("assets/menu/menustart.png")
     -- menuSprites.howToPlay = safeLoadImage("assets/menu/howtoplay.png")
     -- menuSprites.mexit = safeLoadImage("assets/menu/menuexit.png")
@@ -92,6 +100,7 @@ function love.update(dt)
         -- Handle enemy logic
         if enemy.hit_delay > 0 then
             enemy.hit_delay = enemy.hit_delay - dt
+            
         elseif enemy.state == "idle" then
             enemy.idle_time = enemy.idle_time - dt
             if enemy.idle_time <= 0 then
@@ -102,6 +111,7 @@ function love.update(dt)
                 enemy.attack_time = 0
                 playerInputLocked = false -- Allow new input
             end
+
         elseif enemy.state == "indicator" then
             enemy.attack_time = enemy.attack_time + dt
             if enemy.attack_time >= enemy.indicator_time then
@@ -109,18 +119,25 @@ function love.update(dt)
                 enemy.state = "attack"
                 enemy.attack_time = 0
             end
+
         elseif enemy.state == "attack" then
             enemy.attack_time = enemy.attack_time + dt
-            if enemy.attack_time >= 1 then
-                -- Player fails to counter
+
+            -- Check counter and render check >= 0 instead of == 0 for potential missed frames
+            if enemy.attack_time >= 0 and not playerInputLocked then
                 player.health = math.max(0, player.health - enemy.damage)
                 player.state = "hit"
-                player.hit_time = 1 -- Stay in hit state for 1 second
-                enemy.state = "idle"
-                enemy.idle_time = 1 -- Pause before next attack
-                enemy.attack = nil
-                playerInputLocked = true -- Prevent input until next attack
+                player.hit_time = 1
+                playerInputLocked = true
             end
+
+            if enemy.attack_time >= 1 then
+                enemy.state = "idle"
+                enemy.idle_time = 1
+                enemy.attack = nil
+                enemy.attack_time = 0
+            end
+
         elseif enemy.state == "hit" then
             enemy.hit_time = enemy.hit_time - dt
             if enemy.hit_time <= 0 then
@@ -135,6 +152,7 @@ function love.update(dt)
                     enemy.idle_time = 1
                 end
             end
+
         elseif enemy.state == "death" then
             enemy.death_time = enemy.death_time - dt
             if enemy.death_time <= 0 then
@@ -169,19 +187,21 @@ function love.draw()
 
         -- Menu options
         local options = {"START", "How to Play"}
+        love.graphics.setFont(fonts.large)
         for i, option in ipairs(options) do
             if i == menuSelection then
                 love.graphics.setColor(0.2, 0.2, 0.8) -- Highlighted option
             else
                 love.graphics.setColor(0, 0, 0) -- Normal option
             end
-            love.graphics.printf(option, 0, 250 + (i - 1) * 60, 800, "center")
+            love.graphics.printf(option, 0, 250 + (i - 1) * 100, 800, "center")
         end
 
     elseif gameState == "howToPlay" then
         -- How to Play screen
         love.graphics.setColor(1,1,1)
         love.graphics.draw(menuSprites.background, 0, 0)
+        love.graphics.setFont(fonts.medium)
         love.graphics.printf("How to Play", 0, 230, 800, "center")
         love.graphics.printf("Press the arrow keys (UP, LEFT, DOWN) to block enemy attacks.", 50, 330, 700, "center")
         love.graphics.printf("Press ESC or M to return to the main menu.", 50, 430, 700, "center")
@@ -190,7 +210,8 @@ function love.draw()
         -- Countdown for starts
         love.graphics.clear(1, 1, 1)
         love.graphics.setColor(0, 0, 0)
-        love.graphics.printf("Get ready! " .. math.ceil(countdown), 0, 300, 800, "center")
+        love.graphics.setFont(fonts.medium)
+        love.graphics.printf("Starting in " .. math.ceil(countdown), 0, 300, 800, "center")
 
     elseif gameState == "playing" then
         -- Draw background
@@ -200,6 +221,9 @@ function love.draw()
         -- Render the playing state
         -- love.graphics.clear(1, 1, 1)
         love.graphics.setColor(0, 0, 0)
+
+        -- Ensure correct font size
+        love.graphics.setFont(fonts.small)
 
         -- Display the current round
         love.graphics.printf("ROUND: " .. score, 0, 10, 800, "center")
@@ -279,7 +303,7 @@ function resetGameState()
     enemy.attack = nil
     enemy.attack_time = 0
     enemy.hit_time = 0
-    enemy.idle_time = 0
+    enemy.idle_time = 1
     enemy.death_time = 0
     enemy.hit_delay = 0
     score = 1
