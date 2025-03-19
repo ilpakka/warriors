@@ -1,10 +1,12 @@
 # WARRIORS
 
 ## stuff for .json
+```json
 {
     "Lua.runtime.version": "Lua 5.1",
     "Lua.workspace.library": [
-        "path_to_x" 
+        "PATH"
     ],
     "Lua.diagnostics.globals": ["love"]
 }
+```
