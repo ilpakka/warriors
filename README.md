@@ -2,7 +2,7 @@
 
 #### This project combines making a fun game with learning Lua
 
-## Lua/LOVE2D .json config
+## settings.json for Lua/LÖVE
 ```json
 {
     "Lua.runtime.version": "Lua 5.1",
