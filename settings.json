@@ -1,0 +1,19 @@
+{
+    "Lua.runtime.version": "Lua 5.1",
+    "Lua.workspace.library": [
+        "PATH GOES HERE" 
+    ],
+    "Lua.diagnostics.globals": [
+        "love",
+        "safeLoadImage",
+        "resetGameState",
+        "drawPause",
+        "drawDifficulty"
+    ],
+    "Lua.diagnostics.disable": [
+        "unused-function",
+        "undefined-field",
+        "undefined-global",
+        "lowercase-global"
+    ]
+}
