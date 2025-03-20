@@ -1,5 +1,26 @@
-local player = {health = 100, damage = 50, state = "idle", hit_time = 0, attack_time = 0, block_time = 0, death_time = 0}
-local enemy = {health = 100, max_health = 100, damage = 10, state = "idle", attack = nil, attack_time = 0, indicator_time = 1.5, hit_time = 0, idle_time = 0, death_time = 0, hit_delay = 0}
+local player = {
+    health = 100,
+    damage = 50,
+    state = "idle",
+    hit_time = 0,
+    attack_time = 0,
+    block_time = 0,
+    block_type = nil,  -- Will store the type of block being performed
+    death_time = 0
+}
+local enemy = {
+    health = 100,
+    max_health = 100,
+    damage = 10,
+    state = "idle",
+    attack = nil,
+    attack_time = 0,
+    indicator_time = 1.5,
+    hit_time = 0,
+    idle_time = 0,
+    death_time = 0,
+    hit_delay = 0
+}
 local gameState = "menu"
 local countdown = 2 -- Game start countdown
 local counterKey = {overhead = "up", stab = "left", swing = "down"}
@@ -13,6 +34,57 @@ local menuSprites = {}
 local fonts = {}
 local background
 
+-- Game Configuration
+local CONFIG = {
+    WINDOW = {
+        WIDTH = 800,
+        HEIGHT = 600,
+        TITLE = "Warriors"
+    },
+    PLAYER = {
+        INITIAL_HEALTH = 100,
+        INITIAL_DAMAGE = 50,
+        ATTACK_DURATION = 0.3,
+        HIT_DURATION = 1.0,
+        BLOCK_DURATION = 0.2,
+        BLOCK_WINDOW = 0.2
+    },
+    ENEMY = {
+        INITIAL_HEALTH = 100,
+        INITIAL_DAMAGE = 10,
+        HEALTH_INCREASE_PER_LEVEL = 20,
+        DAMAGE_INCREASE_PER_LEVEL = 5,
+        INDICATOR_TIME = 1.5,
+        SPEED_INCREASE_FACTOR = 0.9,
+        MIN_INDICATOR_TIME = 0.5,
+        HIT_DURATION = 1.0,
+        IDLE_DURATION = 1.0,
+        DEATH_DURATION = 1.0,
+        HIT_DELAY = 0.5
+    },
+    GAME = {
+        COUNTDOWN_TIME = 2,
+        DEATH_TRANSITION_TIME = 2
+    }
+}
+
+-- Attack configurations
+local ATTACKS = {
+    overhead = { key = "up", indicator = "indicatorOverhead", sprite = "attackOverhead" },
+    stab = { key = "left", indicator = "indicatorStab", sprite = "attackStab" },
+    swing = { key = "down", indicator = "indicatorSwing", sprite = "attackSwing" }
+}
+
+-- Logger utility
+local Logger = {
+    INFO = "INFO",
+    WARNING = "WARNING",
+    ERROR = "ERROR",
+    log = function(self, level, message)
+        print(string.format("[%s][%s] %s", os.date("%Y-%m-%d %H:%M:%S"), level, message))
+    end
+}
+
 -- Safe image loader
 function safeLoadImage(path)
     local success, image = pcall(love.graphics.newImage, path)
@@ -24,11 +96,32 @@ function safeLoadImage(path)
     end
 end
 
+-- Timer system
+local timers = {}
+
+local function updateTimers(dt)
+    for i = #timers, 1, -1 do
+        local timer = timers[i]
+        timer.time = timer.time - dt
+        if timer.time <= 0 then
+            timer.callback()
+            table.remove(timers, i)
+        end
+    end
+end
+
+local function addTimer(delay, callback)
+    table.insert(timers, {
+        time = delay,
+        callback = callback
+    })
+end
+
 -- Loading
 function love.load()
     -- SET FIXED WINDOW + TITLE
-    love.window.setMode(800, 600)
-    love.window.setTitle("Warriors")
+    love.window.setMode(CONFIG.WINDOW.WIDTH, CONFIG.WINDOW.HEIGHT)
+    love.window.setTitle(CONFIG.WINDOW.TITLE)
 
     -- SET FONTS
     fonts.small = love.graphics.newFont(16)
@@ -68,276 +161,399 @@ function love.load()
     enemySprites.indicatorSwing = safeLoadImage("assets/enemy/enemy_indicator_swing.png")
 end
 
--- Update
-function love.update(dt)
-    if gameState == "menu" then
-        -- Wait for user to select an option
-    elseif gameState == "howToPlay" then
-        -- Wait for input to return to the menu
-    elseif gameState == "countdown" then
-        countdown = countdown - dt
-        if countdown <= 0 then
-            gameState = "playing"
-        end
-    elseif gameState == "playing" then
+-- State definitions
+local States = {
+    PLAYER = {
+        IDLE = "idle",
+        ATTACK = "attack",
+        HIT = "hit",
+        BLOCK = "block",
+        DEATH = "death"
+    },
+    ENEMY = {
+        IDLE = "idle",
+        INDICATOR = "indicator",
+        ATTACK = "attack",
+        HIT = "hit",
+        DEATH = "death"
+    },
+    GAME = {
+        MENU = "menu",
+        HOW_TO_PLAY = "howToPlay",
+        COUNTDOWN = "countdown",
+        PLAYING = "playing",
+        GAMEOVER = "gameover"
+    }
+}
 
-        -- PLAYER ATTACK
-        if player.state == "attack" and player.attack_time > 0 then
+-- Forward declare StateManager
+local StateManager = {}
+
+-- Define StateManager components
+StateManager.game = {
+    changeState = function(newState)
+        if States.GAME[newState] then
+            local oldState = gameState
+            gameState = States.GAME[newState]
+            Logger:log(Logger.INFO, string.format("Game state changed: %s -> %s", oldState, gameState))
+        end
+    end
+}
+
+StateManager.player = {
+    changeState = function(newState, params)
+        if States.PLAYER[newState] then
+            local oldState = player.state
+            player.state = States.PLAYER[newState]
+            
+            -- State entry actions
+            if newState == "BLOCK" then
+                player.block_type = params.blockType -- overhead, stab, or swing
+                player.block_time = CONFIG.PLAYER.BLOCK_DURATION
+            elseif newState == "ATTACK" then
+                player.attack_time = CONFIG.PLAYER.ATTACK_DURATION
+            elseif newState == "HIT" then
+                player.hit_time = CONFIG.PLAYER.HIT_DURATION
+            elseif newState == "DEATH" then
+                player.death_time = love.timer.getTime()
+            end
+            
+            Logger:log(Logger.INFO, string.format("Player state changed: %s -> %s", oldState, player.state))
+        end
+    end,
+    
+    updateState = function(dt)
+        if player.state == States.PLAYER.BLOCK then
+            -- Don't automatically end block state - it will be changed based on enemy attack result
+            -- Only update the timer
+            player.block_time = player.block_time - dt
+        elseif player.state == States.PLAYER.ATTACK and player.attack_time > 0 then
             player.attack_time = player.attack_time - dt
             if player.attack_time <= 0 then
-                player.state = "idle" -- Reset to idle after attacking
+                StateManager.player.changeState("IDLE")
             end
-        end
-
-        -- PLAYER HIT
-        if player.state == "hit" and player.hit_time > 0 then
+        elseif player.state == States.PLAYER.HIT and player.hit_time > 0 then
             player.hit_time = player.hit_time - dt
             if player.hit_time <= 0 then
-                player.state = "idle" -- Reset player to idle after hit
-                enemy.hit_delay = 0.5 -- Add delay before enemy continues
+                StateManager.player.changeState("IDLE")
+                enemy.hit_delay = 0.5
+            end
+        elseif player.state == States.PLAYER.DEATH then
+            if love.timer.getTime() - player.death_time >= CONFIG.GAME.DEATH_TRANSITION_TIME then
+                StateManager.game.changeState("GAMEOVER")
             end
         end
+    end
+}
 
-        if player.state == "death" then
-            if love.timer.getTime() - player.death_time >= 2 then
-                gameState = "gameover"
+StateManager.enemy = {
+    changeState = function(newState, params)
+        if States.ENEMY[newState] then
+            local oldState = enemy.state
+            enemy.state = States.ENEMY[newState]
+            
+            -- State entry actions
+            if newState == "INDICATOR" then
+                enemy.attack_time = 0
+            elseif newState == "ATTACK" then
+                enemy.attack_time = 0
+            elseif newState == "HIT" then
+                enemy.hit_time = CONFIG.ENEMY.HIT_DURATION
+            elseif newState == "DEATH" then
+                enemy.death_time = CONFIG.ENEMY.DEATH_DURATION
             end
+            
+            if newState == "IDLE" then
+                enemy.idle_time = CONFIG.ENEMY.IDLE_DURATION
+            end
+            
+            Logger:log(Logger.INFO, string.format("Enemy state changed: %s -> %s", oldState, enemy.state))
         end
-
-        -- ENEMY LOGIC
+    end,
+    
+    updateState = function(dt)
         if enemy.hit_delay > 0 then
             enemy.hit_delay = enemy.hit_delay - dt
-            
-        elseif enemy.state == "idle" then
+            return
+        end
+
+        if enemy.state == States.ENEMY.IDLE then
             enemy.idle_time = enemy.idle_time - dt
             if enemy.idle_time <= 0 then
-                -- Begin a new attack cycle
                 local attackTypes = {"overhead", "stab", "swing"}
                 enemy.attack = attackTypes[math.random(#attackTypes)]
-                enemy.state = "indicator"
-                enemy.attack_time = 0
-                playerInputLocked = false -- Allow new input
+                StateManager.enemy.changeState("INDICATOR")
+                playerInputLocked = false
             end
-
-        elseif enemy.state == "indicator" then
+        elseif enemy.state == States.ENEMY.INDICATOR then
             enemy.attack_time = enemy.attack_time + dt
             if enemy.attack_time >= enemy.indicator_time then
-                -- Transition to attack if no input was received
-                enemy.state = "attack"
-                enemy.attack_time = 0
+                StateManager.enemy.changeState("ATTACK")
             end
-
-        elseif enemy.state == "attack" then
+        elseif enemy.state == States.ENEMY.ATTACK then
             enemy.attack_time = enemy.attack_time + dt
-
-            -- Check counter and render check >= 0 instead of == 0 for potential missed frames
+            
+            -- Check block success at the start of attack animation
             if enemy.attack_time >= 0 and not playerInputLocked then
-                player.health = math.max(0, player.health - enemy.damage)
-                player.state = "hit"
-                player.hit_time = 1
+                if player.state == States.PLAYER.BLOCK then
+                    if player.block_type == enemy.attack then
+                        -- Successful block
+                        addTimer(0.5, function() -- Delay before counter-attack
+                            -- Change both states simultaneously
+                            StateManager.player.changeState("ATTACK")
+                            StateManager.enemy.changeState("HIT")
+                            enemy.health = math.max(0, enemy.health - player.damage)
+                            
+                            -- Reset both to idle after attack duration
+                            addTimer(CONFIG.PLAYER.ATTACK_DURATION, function()
+                                enemy.attack = nil
+                                StateManager.player.changeState("IDLE")
+                            end)
+                        end)
+                    else
+                        -- Wrong block type
+                        player.health = math.max(0, player.health - enemy.damage)
+                        StateManager.player.changeState("HIT")
+                    end
+                else
+                    -- No block
+                    player.health = math.max(0, player.health - enemy.damage)
+                    StateManager.player.changeState("HIT")
+                end
                 playerInputLocked = true
             end
-
+            
+            -- End attack state
             if enemy.attack_time >= 1 then
-                enemy.state = "idle"
-                enemy.idle_time = 1
-                enemy.attack = nil
-                enemy.attack_time = 0
+                if enemy.state ~= States.ENEMY.HIT then  -- Changed != to ~=
+                    StateManager.enemy.changeState("IDLE")
+                    enemy.idle_time = 1
+                    enemy.attack = nil
+                end
+                -- Only reset player to idle if they're still blocking
+                if player.state == States.PLAYER.BLOCK then
+                    StateManager.player.changeState("IDLE")
+                end
             end
-
-        elseif enemy.state == "hit" then
+        elseif enemy.state == States.ENEMY.HIT then
             enemy.hit_time = enemy.hit_time - dt
             if enemy.hit_time <= 0 then
-                -- Enemy dies if health reaches zero
                 if enemy.health <= 0 then
-                    enemy.state = "death"
-                    enemy.death_time = 1 -- Stay in "death" state for 1 second
-                    player.state = "idle" -- Reset player state after kill
+                    StateManager.enemy.changeState("DEATH")
+                    StateManager.player.changeState("IDLE")
                 else
-                    -- Return to idle after hit
-                    enemy.state = "idle"
+                    StateManager.enemy.changeState("IDLE")
                     enemy.idle_time = 1
                 end
             end
-
-        elseif enemy.state == "death" then
+        elseif enemy.state == States.ENEMY.DEATH then
             enemy.death_time = enemy.death_time - dt
             if enemy.death_time <= 0 then
-                -- Spawn a new enemy
-                score = score + 1 -- Increment round
-                enemy.max_health = enemy.max_health + 20 -- Enemy gains 20 HP each time
+                score = score + 1
+                enemy.max_health = enemy.max_health + CONFIG.ENEMY.HEALTH_INCREASE_PER_LEVEL
                 enemy.health = enemy.max_health
-                enemy.damage = enemy.damage + 5 -- Enemy gains 5 damage each time
-                enemy.indicator_time = math.max(0.5, enemy.indicator_time * 0.9) -- Ramp up speed by 10%
-                enemy.state = "idle"
-                enemy.idle_time = 1 -- Pause before next attack
+                enemy.damage = enemy.damage + CONFIG.ENEMY.DAMAGE_INCREASE_PER_LEVEL
+                enemy.indicator_time = math.max(
+                    CONFIG.ENEMY.MIN_INDICATOR_TIME,
+                    enemy.indicator_time * CONFIG.ENEMY.SPEED_INCREASE_FACTOR
+                )
+                StateManager.enemy.changeState("IDLE")
+                enemy.idle_time = 1
             end
         end
+    end
+}
 
+-- Update
+function love.update(dt)
+    -- Update timers
+    updateTimers(dt)
+
+    if gameState == States.GAME.PLAYING then
+        StateManager.player.updateState(dt)
+        StateManager.enemy.updateState(dt)
+        
         -- Check player health
-        if player.health <= 0 and player.state ~= "death" then
-            player.state = "death"
-            player.death_time = love.timer.getTime()
+        if player.health <= 0 and player.state ~= States.PLAYER.DEATH then
+            StateManager.player.changeState("DEATH")
+        end
+    elseif gameState == States.GAME.COUNTDOWN then
+        countdown = countdown - dt
+        if countdown <= 0 then
+            StateManager.game.changeState("PLAYING")
         end
     end
 end
 
--- Drawing
+-- Add these drawing helper functions before love.draw
+
+-- Helper function to draw health bars
+local function drawHealthBar(x, y, current, max, label, color)
+    love.graphics.setColor(color)
+    love.graphics.rectangle("fill", x, 30, 200 * (current / max), 20)
+    love.graphics.setColor(0, 0, 0)
+    love.graphics.rectangle("line", x, 30, 200, 20)
+    love.graphics.print(label .. ": " .. current .. "/" .. max, x, 55)
+end
+
+-- Menu drawing functions
+local function drawMenu()
+    if menuSprites.background then
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(menuSprites.background, 0, 0)
+    end
+
+    local options = {"START", "How to Play", "EXIT"}
+    love.graphics.setFont(fonts.large)
+    for i, option in ipairs(options) do
+        love.graphics.setColor(i == menuSelection and {1, 1, 1} or {0, 0, 0})
+        love.graphics.printf(option, 0, 250 + (i - 1) * 100, CONFIG.WINDOW.WIDTH, "center")
+    end
+end
+
+local function drawHowToPlay()
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.draw(menuSprites.background, 0, 0)
+    
+    love.graphics.setFont(fonts.medium)
+    love.graphics.printf("How to Play", 0, 230, CONFIG.WINDOW.WIDTH, "center")
+    
+    love.graphics.setFont(fonts.small)
+    local instructions = {
+        "You need to block the enemy attacks via arrow keys (UP, DOWN, LEFT).",
+        "The enemy can attack three different ways: OVERHEAD, STAB, OR SWING.",
+        "If you're successful then you'll deal massive damage to the enemy.",
+        "Press 'ESC' or 'M' to return to the main menu."
+    }
+    
+    for i, text in ipairs(instructions) do
+        love.graphics.printf(text, 50, 300 + (i - 1) * 50, 700, "center")
+    end
+end
+
+local function drawCountdown()
+    love.graphics.clear(0.533, 0, 0.082)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.setFont(fonts.medium)
+    love.graphics.printf("Starting in.. " .. math.ceil(countdown), 0, 300, CONFIG.WINDOW.WIDTH, "center")
+end
+
+local function drawEnemySprite()
+    if enemy.state == "death" then
+        love.graphics.draw(enemySprites.death)
+    elseif enemy.state == "indicator" and enemy.attack then
+        love.graphics.draw(enemySprites[ATTACKS[enemy.attack].indicator])
+    elseif enemy.state == "attack" and enemy.attack then
+        love.graphics.draw(enemySprites[ATTACKS[enemy.attack].sprite])
+    elseif enemy.state and enemySprites[enemy.state] then
+        love.graphics.draw(enemySprites[enemy.state])
+    end
+end
+
+local function drawPlayerSprite()
+    if player.state == States.PLAYER.DEATH then
+        love.graphics.draw(playerSprites.death)
+    elseif player.state == States.PLAYER.BLOCK then
+        love.graphics.draw(playerSprites["block" .. player.block_type:gsub("^%l", string.upper)])
+    else
+        love.graphics.draw(playerSprites[player.state])
+    end
+end
+
+local function drawGameplay()
+    -- Draw background
+    if background then
+        love.graphics.draw(background, 0, 0)
+    end
+
+    -- Display round
+    love.graphics.setFont(fonts.medium)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.printf("ROUND: " .. score, 0, 10, CONFIG.WINDOW.WIDTH, "center")
+
+    -- Health bars
+    love.graphics.setFont(fonts.small)
+    drawHealthBar(30, 30, player.health, CONFIG.PLAYER.INITIAL_HEALTH, "Player HP", {0, 1, 0})
+    drawHealthBar(570, 30, enemy.health, enemy.max_health, "Enemy HP", {1, 0, 0})
+
+    -- Draw characters
+    love.graphics.setColor(1, 1, 1)
+    drawEnemySprite()
+    drawPlayerSprite()
+end
+
+local function drawGameOver()
+    love.graphics.clear(0.533, 0, 0.082)
+    love.graphics.setFont(fonts.medium)
+    
+    -- Game over text
+    love.graphics.setColor(0, 0, 0)
+    love.graphics.printf("GAME OVER", 0, 100, CONFIG.WINDOW.WIDTH, "center")
+    love.graphics.printf("Enemies Defeated: " .. (score - 1), 0, 200, CONFIG.WINDOW.WIDTH, "center")
+    
+    -- Menu options
+    local options = {"RESTART", "MENU", "EXIT"}
+    for i, option in ipairs(options) do
+        love.graphics.setColor(i == gameoverSelection and {1, 1, 1} or {0, 0, 0})
+        love.graphics.printf(option, 0, 330 + (i - 1) * 50, CONFIG.WINDOW.WIDTH, "center")
+    end
+end
+
+-- Update the main draw function to use these components
 function love.draw()
-    love.graphics.clear(1,1,1)
+    love.graphics.clear(1, 1, 1)
 
     if gameState == "menu" then
-        -- Render the main menu
-        if menuSprites.background then
-            love.graphics.setColor(1,1,1)
-            love.graphics.draw(menuSprites.background, 0, 0)
-        end
-
-        -- Menu options
-        local options = {"START", "How to Play", "EXIT"}
-        love.graphics.setFont(fonts.large)
-        for i, option in ipairs(options) do
-            if i == menuSelection then
-                love.graphics.setColor(1, 1, 1) -- Highlighted option
-            else
-                love.graphics.setColor(0, 0, 0) -- Normal option
-            end
-            love.graphics.printf(option, 0, 250 + (i - 1) * 100, 800, "center")
-        end
-
+        drawMenu()
     elseif gameState == "howToPlay" then
-        -- How to Play screen
-        love.graphics.setColor(1,1,1)
-        love.graphics.draw(menuSprites.background, 0, 0)
-        love.graphics.setFont(fonts.medium)
-        love.graphics.printf("How to Play", 0, 230, 800, "center")
-        love.graphics.setFont(fonts.small)
-        love.graphics.printf("You need to block the enemy attacks via arrow keys (UP, DOWN, LEFT).", 50, 300, 700, "center")
-        love.graphics.printf("The enemy can attack three different ways: OVERHEAD, STAB, OR SWING.", 50, 350, 700, "center")
-        love.graphics.printf("If you're successful then you'll deal massive damage to the enemy.", 50, 400, 700, "center")
-        love.graphics.printf("Press 'ESC' or 'M' to return to the main menu.", 50, 500, 700, "center")
-
+        drawHowToPlay()
     elseif gameState == "countdown" then
-        -- Countdown for starts
-        love.graphics.clear(0.533, 0, 0.082) -- Background color copy
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.setFont(fonts.medium)
-        love.graphics.printf("Starting in.. " .. math.ceil(countdown), 0, 300, 800, "center")
-
+        drawCountdown()
     elseif gameState == "playing" then
-        -- Draw background
-        if background then
-            love.graphics.draw(background, 0, 0)
-        end
-
-        -- Render the playing state
-        -- love.graphics.clear(1, 1, 1)
-        love.graphics.setColor(0, 0, 0)
-
-        -- Ensure correct font size
-        love.graphics.setFont(fonts.small)
-
-        -- Display the current round
-        love.graphics.setFont(fonts.medium)
-        love.graphics.setColor(1,1,1)
-        love.graphics.printf("ROUND: " .. score, 0, 10, 800, "center")
-
-        -- Reset font
-        love.graphics.setFont(fonts.small)
-
-        -- Player health bar
-        love.graphics.setColor(0, 1, 0) -- Green for health bar
-        love.graphics.rectangle("fill", 30, 30, 200 * (player.health / 100), 20)
-        love.graphics.setColor(0, 0, 0) -- Black outline
-        love.graphics.rectangle("line", 30, 30, 200, 20)
-        love.graphics.print("Player HP: " .. player.health .. "/100", 30, 55)
-
-        -- Enemy health bar
-        love.graphics.setColor(1, 0, 0) -- Red for health bar
-        love.graphics.rectangle("fill", 570, 30, 200 * (enemy.health / enemy.max_health), 20)
-        love.graphics.setColor(0, 0, 0) -- Black outline
-        love.graphics.rectangle("line", 570, 30, 200, 20)
-        love.graphics.print("Enemy HP: " .. enemy.health .. "/" .. enemy.max_health, 570, 55)
-
-        -- Reset to white background before rendering sprites (sprite colors clash)
-        love.graphics.setColor(1, 1, 1)
-
-        -- Draw enemy sprite
-        if enemy.state == "death" then
-            love.graphics.draw(enemySprites.death)
-
-        elseif enemy.state == "indicator" then
-            if enemy.attack == "overhead" then
-                love.graphics.draw(enemySprites.indicatorOverhead, enemy.x, enemy.y)
-            elseif enemy.attack == "stab" then
-                love.graphics.draw(enemySprites.indicatorStab, enemy.x, enemy.y)
-            elseif enemy.attack == "swing" then
-                love.graphics.draw(enemySprites.indicatorSwing, enemy.x, enemy.y)
-            end
-
-        elseif enemy.state == "attack" then
-            if enemy.attack == "overhead" then
-                love.graphics.draw(enemySprites.attackOverhead, enemy.x, enemy.y)
-            elseif enemy.attack == "stab" then
-                love.graphics.draw(enemySprites.attackStab, enemy.x, enemy.y)
-            elseif enemy.attack == "swing" then
-                love.graphics.draw(enemySprites.attackSwing, enemy.x, enemy.y)
-            end
-
-        elseif enemy.state and enemySprites[enemy.state] then
-            love.graphics.draw(enemySprites[enemy.state], enemy.x, enemy.y)
-        end
-
-        -- Draw player sprite
-        if player.state == "death" then
-            love.graphics.draw(playerSprites.death)
-        else
-            love.graphics.draw(playerSprites[player.state])
-        end
-
+        drawGameplay()
     elseif gameState == "gameover" then
-        -- Render the game over screen
-        love.graphics.setFont(fonts.medium)
-        love.graphics.clear(0.533, 0, 0.082) -- Background color copy
-        love.graphics.setColor(0, 0, 0) -- Black text
-        love.graphics.printf("GAME OVER", 0, 100, 800, "center")
-        love.graphics.printf("Enemies Defeated: " .. (score - 1), 0, 200, 800, "center")
-        -- Game over menu options
-        local options = {"RESTART", "MENU", "EXIT"}
-
-        for i, option in ipairs(options) do
-            if i == gameoverSelection then
-                love.graphics.setColor(1, 1, 1) -- Highlighted option
-            else
-                love.graphics.setColor(0, 0, 0) -- Normal option
-            end
-            love.graphics.printf(option, 0, 330 + (i - 1) * 50, 800, "center")
-        end
+        drawGameOver()
     end
 end
 
 -- Game state reset
 function resetGameState()
-    gameState = "countdown"
-    countdown = 2
-    player.health = 100
-    player.state = "idle"
-    player.hit_time = 0
-    player.attack_time = 0
-    player.death_time = 0
-    enemy.health = 100
-    enemy.max_health = 100
-    enemy.damage = 20
-    enemy.indicator_time = 0.5
-    enemy.state = "idle"
-    enemy.attack = nil
-    enemy.attack_time = 0
-    enemy.hit_time = 0
-    enemy.idle_time = 1
-    enemy.death_time = 0
-    enemy.hit_delay = 0
-    score = 1
-    playerInputLocked = false
+    local success, err = pcall(function()
+        gameState = "countdown"
+        countdown = CONFIG.GAME.COUNTDOWN_TIME
+        
+        -- Reset player
+        player.health = CONFIG.PLAYER.INITIAL_HEALTH
+        player.state = "idle"
+        player.hit_time = 0
+        player.attack_time = 0
+        player.death_time = 0
+        
+        -- Reset enemy
+        enemy.health = CONFIG.ENEMY.INITIAL_HEALTH
+        enemy.max_health = CONFIG.ENEMY.INITIAL_HEALTH
+        enemy.damage = CONFIG.ENEMY.INITIAL_DAMAGE
+        enemy.indicator_time = CONFIG.ENEMY.INDICATOR_TIME
+        enemy.state = "idle"
+        enemy.attack = nil
+        enemy.attack_time = 0
+        enemy.hit_time = 0
+        enemy.idle_time = 1
+        enemy.death_time = 0
+        enemy.hit_delay = 0
+        
+        -- Reset game
+        score = 1
+        playerInputLocked = false
+        
+        Logger.log(Logger.INFO, "Game state reset successfully")
+    end)
+    
+    if not success then
+        Logger.log(Logger.ERROR, "Failed to reset game state: " .. tostring(err))
+        -- Fallback to menu state if reset fails
+        gameState = "menu"
+    end
 end
 
 -- Key logic
@@ -380,26 +596,19 @@ function love.keypressed(key)
         end
 
     elseif gameState == "playing" and not playerInputLocked then
-        -- Handle counter input during gameplay
-        if enemy.attack and key == counterKey[enemy.attack] then
-            -- Successful counter
-            enemy.health = math.max(0, enemy.health - player.damage) -- Reduce enemy health
-            player.state = "attack"
-            player.attack_time = 0.5 -- Player stays in attack state for 0.5 seconds
-            enemy.state = "hit"
-            enemy.hit_time = 1 -- Enemy stays in hit state for 1 second
-            enemy.attack = nil -- Clear the enemy's current attack
-            playerInputLocked = true -- Lock player input for the current cycle
+        if enemy.attack and enemy.state == States.ENEMY.INDICATOR then
+            local blockType = nil
+            if key == "up" then
+                blockType = "overhead"
+            elseif key == "left" then
+                blockType = "stab"
+            elseif key == "down" then
+                blockType = "swing"
+            end
 
-        elseif enemy.attack then
-            -- Failed counter
-            player.health = math.max(0, player.health - enemy.damage) -- Reduce player health
-            player.state = "hit"
-            player.hit_time = 1 -- Player stays in hit state for 1 second
-            enemy.state = "idle" -- Enemy returns to idle state
-            enemy.idle_time = 1 -- Pause before the next attack
-            enemy.attack = nil -- Clear the enemy's attack
-            playerInputLocked = true
+            if blockType then
+                StateManager.player.changeState("BLOCK", {blockType = blockType})
+            end
         end
 
     elseif gameState == "gameover" then
