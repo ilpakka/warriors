@@ -8,12 +8,12 @@ local DIFFICULTIES = {
     HARD = {
         name = "Hard",
         indicatorTime = 0.75,
-        playerHealth = 100,
+        playerHealth = 50,
         damageMultiplier = 2
     },
     EXTREME = {
         name = "Extreme",
-        indicatorTime = 0.3,
+        indicatorTime = 0.5,
         playerHealth = 1,
         damageMultiplier = 1
     }
@@ -583,7 +583,7 @@ function love.update(dt)
     end
 end
 
--- Helper function to draw health bars
+-- First, define the most basic drawing functions that don't depend on other functions
 local function drawHealthBar(x, y, current, max, label, color)
     love.graphics.setColor(color)
     love.graphics.rectangle("fill", x, 30, 200 * (current / max), 20)
@@ -592,7 +592,52 @@ local function drawHealthBar(x, y, current, max, label, color)
     love.graphics.print(label .. ": " .. current .. "/" .. max, x, 55)
 end
 
--- Menu drawing functions
+local function drawEnemySprite()
+    if enemy.state == "death" then
+        love.graphics.draw(enemySprites.death)
+    elseif enemy.state == "indicator" and enemy.attack then
+        love.graphics.draw(enemySprites[ATTACKS[enemy.attack].indicator])
+    elseif enemy.state == "attack" and enemy.attack then
+        love.graphics.draw(enemySprites[ATTACKS[enemy.attack].sprite])
+    elseif enemy.state and enemySprites[enemy.state] then
+        love.graphics.draw(enemySprites[enemy.state])
+    end
+end
+
+local function drawPlayerSprite()
+    if player.state == States.PLAYER.DEATH then
+        love.graphics.draw(playerSprites.death)
+    elseif player.state == States.PLAYER.BLOCK then
+        love.graphics.draw(playerSprites["block" .. player.block_type:gsub("^%l", string.upper)])
+    else
+        love.graphics.draw(playerSprites[player.state])
+    end
+end
+
+-- Then define the composite drawing functions that use the basic functions
+local function drawGameplay()
+    -- Draw background
+    if background then
+        love.graphics.draw(background, 0, 0)
+    end
+
+    -- Display round
+    love.graphics.setFont(fonts.medium)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.printf("ROUND: " .. score, 0, 10, CONFIG.WINDOW.WIDTH, "center")
+
+    -- Health bars
+    love.graphics.setFont(fonts.small)
+    drawHealthBar(30, 30, player.health, currentDifficulty.playerHealth, "Player HP", {0, 1, 0})
+    drawHealthBar(570, 30, enemy.health, enemy.max_health, "Enemy HP", {1, 0, 0})
+
+    -- Draw characters
+    love.graphics.setColor(1, 1, 1)
+    drawEnemySprite()
+    drawPlayerSprite()
+end
+
+-- Then the rest of the drawing functions
 local function drawMenu()
     if menuSprites.background then
         love.graphics.setColor(1, 1, 1)
@@ -605,6 +650,52 @@ local function drawMenu()
         love.graphics.setColor(i == menuSelection and {1, 1, 1} or {0, 0, 0})
         love.graphics.printf(option, 0, 250 + (i - 1) * 100, CONFIG.WINDOW.WIDTH, "center")
     end
+end
+
+local function drawDifficulty()
+    love.graphics.clear(0.533, 0, 0.082)
+    
+    -- Title
+    love.graphics.setFont(fonts.large)
+    love.graphics.setColor(0, 0, 0)
+    love.graphics.printf("Select Difficulty", 0, 80, CONFIG.WINDOW.WIDTH, "center")
+    
+    -- Difficulty options and descriptions
+    love.graphics.setFont(fonts.medium)
+    local options = {
+        {
+            name = "Normal",
+            desc = "Standard experience",
+            stats = "Health: 100  |  Enemy Damage: Normal  |  Attack Speed: Normal"
+        },
+        {
+            name = "Hard",
+            desc = "For skilled warriors",
+            stats = "Health: 50  |  Enemy Damage: Double  |  Attack Speed: Fast"
+        },
+        {
+            name = "Extreme",
+            desc = "True warrior's challenge",
+            stats = "Health: 1  |  Enemy Damage: Lethal  |  Attack Speed: Very Fast"
+        }
+    }
+    
+    for i, option in ipairs(options) do
+        love.graphics.setFont(fonts.medium)
+        love.graphics.setColor(i == difficultySelection and {1, 1, 1} or {0, 0, 0})
+        love.graphics.printf(option.name, 0, 200 + (i - 1) * 120, CONFIG.WINDOW.WIDTH, "center")
+        
+        love.graphics.setFont(fonts.small)
+        love.graphics.setColor(i == difficultySelection and {0.8, 0.8, 0.8} or {0.3, 0.3, 0.3})
+        love.graphics.printf(option.desc, 0, 240 + (i - 1) * 120, CONFIG.WINDOW.WIDTH, "center")
+        
+        love.graphics.printf(option.stats, 0, 260 + (i - 1) * 120, CONFIG.WINDOW.WIDTH, "center")
+    end
+    
+    -- Instructions
+    love.graphics.setFont(fonts.small)
+    love.graphics.setColor(0, 0, 0)
+    love.graphics.printf("Press ENTER to select, ESC to go back", 0, 550, CONFIG.WINDOW.WIDTH, "center")
 end
 
 local function drawHowToPlay()
@@ -634,31 +725,6 @@ local function drawCountdown()
     love.graphics.printf("Starting in.. " .. math.ceil(countdown), 0, 300, CONFIG.WINDOW.WIDTH, "center")
 end
 
-local function drawEnemySprite()
-    if enemy.state == "death" then
-        love.graphics.draw(enemySprites.death)
-    elseif enemy.state == "indicator" and enemy.attack then
-        love.graphics.draw(enemySprites[ATTACKS[enemy.attack].indicator])
-    elseif enemy.state == "attack" and enemy.attack then
-        love.graphics.draw(enemySprites[ATTACKS[enemy.attack].sprite])
-    elseif enemy.state and enemySprites[enemy.state] then
-        love.graphics.draw(enemySprites[enemy.state])
-    end
-end
-
-local function drawPlayerSprite()
-    if player.state == States.PLAYER.DEATH then
-        love.graphics.draw(playerSprites.death)
-    elseif player.state == States.PLAYER.BLOCK then
-        love.graphics.draw(playerSprites["block" .. player.block_type:gsub("^%l", string.upper)])
-    else
-        love.graphics.draw(playerSprites[player.state])
-    end
-end
-
-local highScoreFlashTimer = 0
-
--- Update drawGameOver
 local function drawGameOver()
     love.graphics.clear(0.533, 0, 0.082)
     
@@ -679,9 +745,7 @@ local function drawGameOver()
     
     -- Show high score notification
     if finalScore > highScores[currentDifficulty.name] then
-        
         highScoreFlashTimer = highScoreFlashTimer + love.timer.getDelta()
-        
         
         local scale = 1 + math.sin(highScoreFlashTimer * 5) * 0.1
                
@@ -704,7 +768,6 @@ local function drawGameOver()
         love.graphics.setFont(fonts.small)
         love.graphics.setColor(0, 0, 0)
         love.graphics.printf(string.format("Best Score: %d", highScores[currentDifficulty.name]), 0, 300, CONFIG.WINDOW.WIDTH, "center")
-        love.graphics.printf(string.format("Score needed: %d more", highScores[currentDifficulty.name] - finalScore), 0, 320, CONFIG.WINDOW.WIDTH, "center")
     end
     
     -- Menu options
@@ -713,6 +776,31 @@ local function drawGameOver()
     for i, option in ipairs(options) do
         love.graphics.setColor(i == gameoverSelection and {1, 1, 1} or {0, 0, 0})
         love.graphics.printf(option, 0, 420 + (i - 1) * 50, CONFIG.WINDOW.WIDTH, "center")
+    end
+end
+
+local function drawPause()
+    -- Draw the cached gameplay screenshot
+    if pauseScreenshot then
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(pauseScreenshot, 0, 0)
+    end
+    
+    -- Draw semi-transparent overlay
+    love.graphics.setColor(0, 0, 0, 0.7)
+    love.graphics.rectangle("fill", 0, 0, CONFIG.WINDOW.WIDTH, CONFIG.WINDOW.HEIGHT)
+    
+    -- Draw pause menu
+    love.graphics.setFont(fonts.large)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.printf("PAUSED", 0, 150, CONFIG.WINDOW.WIDTH, "center")
+    
+    -- Menu options
+    local options = {"RESUME", "EXIT TO MENU"}
+    love.graphics.setFont(fonts.medium)
+    for i, option in ipairs(options) do
+        love.graphics.setColor(i == pauseSelection and {1, 1, 1} or {0.5, 0.5, 0.5})
+        love.graphics.printf(option, 0, 300 + (i - 1) * 80, CONFIG.WINDOW.WIDTH, "center")
     end
 end
 
@@ -762,14 +850,20 @@ function love.keypressed(key)
         if key == "up" then
             AudioManager.playSound("menuSelect")
             difficultySelection = math.max(1, difficultySelection - 1)
+            Logger:log(Logger.INFO, "Difficulty selection changed to: " .. difficultySelection)
         elseif key == "down" then
             AudioManager.playSound("menuSelect")
             difficultySelection = math.min(3, difficultySelection + 1)
+            Logger:log(Logger.INFO, "Difficulty selection changed to: " .. difficultySelection)
         elseif key == "return" or key == "enter" then
-            resetGameState() -- Start game with selected difficulty
+            Logger:log(Logger.INFO, "Starting game with difficulty: " .. difficultySelection)
+            gameState = "countdown"
+            countdown = CONFIG.GAME.COUNTDOWN_TIME
+            AudioManager.playMusic("battle")
+            resetGameState()
         elseif key == "escape" then
             gameState = "menu"
-            difficultySelection = 1 -- Reset selection when going back
+            difficultySelection = 1
         end
     elseif gameState == "gameover" then
         -- Navigate game over options
@@ -902,101 +996,5 @@ function resetGameState()
     if not success then
         Logger:log(Logger.ERROR, "Failed to reset game state: " .. tostring(err))
         gameState = "menu"
-    end
-end
-
-local function drawGameplay()
-    -- Draw background
-    if background then
-        love.graphics.draw(background, 0, 0)
-    end
-
-    -- Display round
-    love.graphics.setFont(fonts.medium)
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.printf("ROUND: " .. score, 0, 10, CONFIG.WINDOW.WIDTH, "center")
-
-    -- Health bars
-    love.graphics.setFont(fonts.small)
-    drawHealthBar(30, 30, player.health, currentDifficulty.playerHealth, "Player HP", {0, 1, 0})
-    drawHealthBar(570, 30, enemy.health, enemy.max_health, "Enemy HP", {1, 0, 0})
-
-    -- Draw characters
-    love.graphics.setColor(1, 1, 1)
-    drawEnemySprite()
-    drawPlayerSprite()
-end
-
--- Add drawing function for difficulty screen
-local function drawDifficulty()
-    love.graphics.clear(0.533, 0, 0.082)
-    
-    -- Title
-    love.graphics.setFont(fonts.large)
-    love.graphics.setColor(0, 0, 0)
-    love.graphics.printf("Select Difficulty", 0, 80, CONFIG.WINDOW.WIDTH, "center")
-    
-    -- Difficulty options and descriptions
-    love.graphics.setFont(fonts.medium)
-    local options = {
-        {
-            name = "Normal",
-            desc = "Standard experience",
-            stats = "Health: 100  |  Enemy Damage: Normal  |  Attack Speed: Normal"
-        },
-        {
-            name = "Hard",
-            desc = "For skilled warriors",
-            stats = "Health: 100  |  Enemy Damage: Double  |  Attack Speed: Fast"
-        },
-        {
-            name = "Extreme",
-            desc = "True warrior's challenge",
-            stats = "Health: 1  |  Enemy Damage: Lethal  |  Attack Speed: Very Fast"
-        }
-    }
-    
-    for i, option in ipairs(options) do
-
-        love.graphics.setFont(fonts.medium)
-        love.graphics.setColor(i == difficultySelection and {1, 1, 1} or {0, 0, 0})
-        love.graphics.printf(option.name, 0, 200 + (i - 1) * 120, CONFIG.WINDOW.WIDTH, "center")
-        
-        love.graphics.setFont(fonts.small)
-        love.graphics.setColor(i == difficultySelection and {0.8, 0.8, 0.8} or {0.3, 0.3, 0.3})
-        love.graphics.printf(option.desc, 0, 240 + (i - 1) * 120, CONFIG.WINDOW.WIDTH, "center")
-        
-        love.graphics.printf(option.stats, 0, 260 + (i - 1) * 120, CONFIG.WINDOW.WIDTH, "center")
-    end
-    
-    -- Instructions
-    love.graphics.setFont(fonts.small)
-    love.graphics.setColor(0, 0, 0)
-    love.graphics.printf("Press ENTER to select, ESC to go back", 0, 550, CONFIG.WINDOW.WIDTH, "center")
-end
-
-
-local function drawPause()
-    -- Draw the cached gameplay screenshot
-    if pauseScreenshot then
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.draw(pauseScreenshot, 0, 0)
-    end
-    
-    -- Draw semi-transparent overlay
-    love.graphics.setColor(0, 0, 0, 0.7)
-    love.graphics.rectangle("fill", 0, 0, CONFIG.WINDOW.WIDTH, CONFIG.WINDOW.HEIGHT)
-    
-    -- Draw pause menu
-    love.graphics.setFont(fonts.large)
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.printf("PAUSED", 0, 150, CONFIG.WINDOW.WIDTH, "center")
-    
-    -- Menu options
-    local options = {"RESUME", "EXIT TO MENU"}
-    love.graphics.setFont(fonts.medium)
-    for i, option in ipairs(options) do
-        love.graphics.setColor(i == pauseSelection and {1, 1, 1} or {0.5, 0.5, 0.5})
-        love.graphics.printf(option, 0, 300 + (i - 1) * 80, CONFIG.WINDOW.WIDTH, "center")
     end
 end
