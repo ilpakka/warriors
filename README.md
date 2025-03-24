@@ -16,8 +16,9 @@
 
 ## Future updates
 
-- **New enemies**
+- **New enemies and bosses**
 - **Story mode**
+- **Customization**
 - **Shop**
 - **Item upgrades**
 
