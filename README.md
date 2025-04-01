@@ -16,7 +16,7 @@
 
 ## Future updates
 
-- **New enemies and bosses**
+- **New enemies and bosses** (WIP)
 - **Story mode**
 - **Customization**
 - **Shop**
